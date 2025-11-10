@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>CodeVeda Final — Hospital System (Zero-Terminal)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root{--bg:#071126;--panel:#0b1724;--accent:#29d0ff;--accent2:#8a5bff;--muted:#9fb0c2;--danger:#ff4d4f;--success:#10b981}
+*{box-sizing:border-box} html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:#e6f6ff;background:linear-gradient(180deg,#020417 0%, #071126 70%)} 
+.app{display:grid;grid-template-columns:320px 1fr 360px;grid-template-rows:72px 1fr;gap:16px;height:100vh;padding:16px}
+.header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-radius:12px;background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));backdrop-filter: blur(6px)}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:50px;height:50px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:800;color:#021}
+.title{font-weight:700}
+.controls{display:flex;align-items:center;gap:8px}
+.btn{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:10px;color:var(--accent);cursor:pointer}
+.btn.ghost{border:1px solid rgba(255,255,255,0.04);color:#d7f7ff}
+.indicator{padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.02);font-size:13px;color:var(--muted)}
+
+/* Sidebar */
+.sidebar{padding:14px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));overflow:auto}
+.nav{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.nav a{padding:10px;border-radius:8px;color:#bfefff;text-decoration:none;display:flex;align-items:center;gap:10px;border:1px solid transparent}
+.nav a.active{background:linear-gradient(90deg, rgba(41,208,255,0.06), rgba(138,91,255,0.04));border:1px solid rgba(255,255,255,0.02);color:#fff}
+
+/* Main */
+.main{padding:10px;border-radius:12px;background:linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.panel{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.02)}
+
+/* Heatmap */
+.heatwrap{position:relative;height:70vh;border-radius:10px;overflow:hidden}
+#heatCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+.map-overlay{position:absolute;right:12px;top:12px;background:rgba(255,255,255,0.03);padding:8px;border-radius:8px;color:var(--muted);font-size:13px}
+
+/* Right column */
+.rightcol{padding:14px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));display:flex;flex-direction:column;gap:12px;overflow:auto}
+.feed{max-height:44vh;overflow:auto;padding:8px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005))}
+.feed-item{display:flex;justify-content:space-between;padding:8px;border-bottom:1px dashed rgba(255,255,255,0.02);font-size:13px}
+.tag{padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.03);font-weight:600;color:#bfefff}
+
+/* Patient Details */
+.ward-list{margin-top:12px}
+.ward{padding:8px;border-radius:8px;background:rgba(255,255,255,0.01);margin-bottom:8px;cursor:pointer}
+.patient{padding:8px;border-radius:6px;background:rgba(255,255,255,0.01);margin-bottom:6px}
+
+/* small */
+.small{font-size:12px;color:var(--muted)}
+
+/* responsive */
+@media (max-width:1100px){.app{grid-template-columns:1fr;grid-template-rows:72px 1fr 420px}.rightcol{order:3}.sidebar{order:2}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="brand">
+      <div class="logo">CV</div>
+      <div>
+        <div class="title">CodeVeda Final</div>
+        <div class="small">Zero-terminal • Real-time infection tracing</div>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="indicator" id="modelStatus">Model: loading…</div>
+      <button class="btn" id="btnSim">Start Simulation</button>
+      <button class="btn" id="btnIngestLab">Ingest Lab Result</button>
+      <button class="btn ghost" id="btnClear">Clear Data</button>
+    </div>
+  </div>
+
+  <div class="sidebar panel">
+    <div style="font-weight:700">Navigation</div>
+    <div class="nav">
+      <a href="#" class="active" id="navHeat">Heatmap</a>
+      <a href="#" id="navFeed">Live Feed</a>
+      <a href="#" id="navEHR">Patient Details</a>
+      <a href="#" id="navAnalytics">Analytics</a>
+    </div>
+    <div style="margin-top:12px;">
+      <div class="small">Status</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <div class="indicator" id="simStatus">Simulation: stopped</div>
+        <div class="indicator" id="eventsCount">Events: 0</div>
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <div class="small">Legend</div>
+      <div style="margin-top:8px"><span class="tag">High risk</span> hotspot • <span class="tag" style="background:rgba(140,140,255,0.12)">EHR patient</span></div>
+    </div>
+    <div class="ward-list" id="wardList"></div>
+  </div>
+
+  <div class="main" id="main">
+    <div id="heatSection" style="display:block" class="panel heatwrap">
+      <canvas id="heatCanvas"></canvas>
+      <div class="map-overlay"><div id="mapClock">--:--:--</div><div class="small" id="mapNote">Simulated hospital network feed</div></div>
+    </div>
+
+    <div id="feedSection" style="display:none" class="panel">
+      <h3>Live Feed</h3>
+      <div class="feed" id="liveFeed"></div>
+    </div>
+
+    <div id="patientSection" style="display:none" class="panel">
+      <h3>Patient Details</h3>
+      <div id="patientDetails" class="small">Select a ward</div>
+    </div>
+
+    <div id="analyticsSection" style="display:none" class="panel">
+      <h3>Analytics</h3>
+      <canvas id="trendChart" height="160"></canvas>
+    </div>
+  </div>
+
+  <div class="rightcol panel">
+    <div style="font-weight:700">Contact Tracing (Recent)</div>
+    <canvas id="ctChart" height="120"></canvas>
+    <div style="height:12px"></div>
+    <div style="font-weight:700">EHR Snapshot</div>
+    <div id="ehrSnapshot" class="small"></div>
+  </div>
+</div>
+
+<script>
+/* --------- Utilities & Persistence --------- */
+const STORE_EVENTS = 'codeveda_final_events_v1';
+const STORE_MODEL = 'codeveda_final_model_v1';
+const STORE_EHR = 'codeveda_final_ehr_v1';
+
+function nowStr(){ return new Date().toLocaleTimeString(); }
+function saveEvent(evt){ const a = loadEvents(); a.unshift(evt); if(a.length>5000) a.pop(); localStorage.setItem(STORE_EVENTS, JSON.stringify(a)); document.getElementById('eventsCount').innerText = 'Events: ' + a.length; }
+function loadEvents(){ return JSON.parse(localStorage.getItem(STORE_EVENTS) || '[]'); }
+function clearAll(){ localStorage.removeItem(STORE_EVENTS); localStorage.removeItem(STORE_MODEL); localStorage.removeItem(STORE_EHR); location.reload(); }
+
+document.getElementById('btnClear').onclick = ()=>{ if(confirm('Clear all stored data?')) clearAll(); };
+
+/* --------- Model Loading --------- */
+let PRETRAINED = null;
+async function loadModel(){ try{ const r = await fetch('models/model.json'); PRETRAINED = await r.json(); document.getElementById('modelStatus').innerText = 'Model: ' + PRETRAINED.model_name; }catch(e){ document.getElementById('modelStatus').innerText='Model: unavailable'; console.error(e); } }
+function predict(evt){ if(!PRETRAINED) return {risk:0.12,label:'low',ts:new Date().toISOString()}; const x=Math.max(0,Math.min(1,evt.x/100)); const y=Math.max(0,Math.min(1,evt.y/100)); let s=PRETRAINED.intercept||0; const feats=[x,y,0,0,0]; for(let i=0;i<PRETRAINED.coefficients.length;i++){ s += (PRETRAINED.coefficients[i]||0)*(feats[i]||0); } const p=1/(1+Math.exp(-s)); return {risk:p,label:p>=PRETRAINED.threshold?'high':(p>=PRETRAINED.threshold*0.6?'medium':'low'),ts:new Date().toISOString()}; }
+
+/* --------- EHR & Wards --------- */
+let EHR = JSON.parse(localStorage.getItem(STORE_EHR) || 'null');
+if(!EHR){
+  EHR = [
+    {patientId:'P-1001',name:'Patient A',ward:'ICU-3',coord:[28,30],age:62,comorbid:'Diabetes',lastLab:'-',labTime:'-'},
+    {patientId:'P-1002',name:'Patient B',ward:'Ward-7',coord:[72,40],age:54,comorbid:'COPD',lastLab:'-',labTime:'-'},
+    {patientId:'P-1003',name:'Patient C',ward:'Ward-4',coord:[45,75],age:40,comorbid:'Post-op',lastLab:'-',labTime:'-'}
+  ];
+  localStorage.setItem(STORE_EHR, JSON.stringify(EHR));
+}
+
+function buildWardList(){
+  const wards = {};
+  EHR.forEach(p=>{ wards[p.ward] = wards[p.ward] || []; wards[p.ward].push(p); });
+  const container = document.getElementById('wardList'); container.innerHTML='';
+  Object.keys(wards).forEach(w=>{
+    const div = document.createElement('div'); div.className='ward'; div.innerText = w + ' ('+wards[w].length+')';
+    div.onclick = ()=>{ showPatientsForWard(w, wards[w]); showSection('patientSection'); };
+    container.appendChild(div);
+  });
+  renderEhrSnapshot();
+}
+
+function renderEhrSnapshot(){
+  const s = document.getElementById('ehrSnapshot'); s.innerHTML = '';
+  EHR.forEach(p => { s.insertAdjacentHTML('beforeend', '<div style="margin-bottom:6px"><strong>'+p.name+'</strong> • '+p.ward+' • '+p.comorbid+'</div>'); });
+}
+
+function showPatientsForWard(ward, patients){
+  const el = document.getElementById('patientDetails'); el.innerHTML = '<div style="font-weight:700;margin-bottom:8px">'+ward+'</div>';
+  patients.forEach(p=>{ el.insertAdjacentHTML('beforeend', '<div class="patient"><div style="font-weight:700">'+p.name+' ('+p.patientId+')</div><div class="small">Age: '+p.age+' • '+p.comorbid+'</div><div class="small">Last Lab: '+p.lastLab+' • '+p.labTime+'</div></div>'); });
+}
+
+/* --------- Charts --------- */
+const ctChart = new Chart(document.getElementById('ctChart').getContext('2d'), {type:'bar', data:{labels:[], datasets:[{label:'Risk %', data:[], backgroundColor:'#ff7a6b'}]}, options:{plugins:{legend:{display:false}}}});
+const trendChart = new Chart(document.getElementById('trendChart').getContext('2d'), {type:'line', data:{labels:[], datasets:[{label:'High-risk events', data:[], borderColor:'#ff7a59', fill:true, backgroundColor:'rgba(255,122,89,0.12)'}]}, options:{plugins:{legend:{display:false}}}});
+
+/* --------- Heatmap Engine (robust) --------- */
+const canvas = document.getElementById('heatCanvas');
+const ctx = canvas.getContext('2d');
+let DPR = window.devicePixelRatio || 1;
+function resize(){ const r = canvas.getBoundingClientRect(); canvas.width = Math.floor(r.width * DPR); canvas.height = Math.floor(r.height * DPR); canvas.style.width = r.width + 'px'; canvas.style.height = r.height + 'px'; ctx.setTransform(DPR,0,0,DPR,0,0); }
+window.addEventListener('resize', resize); resize();
+
+const GRID_W = 220, GRID_H = 140;
+let grid = new Float32Array(GRID_W * GRID_H);
+
+function clearGrid(){ for(let i=0;i<grid.length;i++) grid[i]=0; }
+clearGrid();
+
+function accumulate(events){
+  // decay
+  for(let i=0;i<grid.length;i++) grid[i] *= 0.95;
+  const now = Date.now();
+  events.forEach(e=>{
+    const age = now - new Date(e.ts).getTime();
+    if(age > 1000*60*60*24) return;
+    const gx = Math.max(0, Math.min(GRID_W-1, Math.floor((e.x/100)*GRID_W)));
+    const gy = Math.max(0, Math.min(GRID_H-1, Math.floor((e.y/100)*GRID_H)));
+    const strength = 1 + (e.prediction? e.prediction.risk*2 : 0);
+    for(let oy=-3; oy<=3; oy++){ for(let ox=-3; ox<=3; ox++){ const ix=gx+ox, iy=gy+oy; if(ix<0||iy<0||ix>=GRID_W||iy>=GRID_H) continue; const d2=ox*ox+oy*oy; grid[iy*GRID_W+ix] += strength * Math.exp(-d2/6.0); } }
+  });
+  // compute max
+  let maxv=0; for(let i=0;i<grid.length;i++) if(grid[i]>maxv) maxv=grid[i];
+  return maxv;
+}
+
+function colorMap(t){
+  const r = Math.floor(255 * Math.min(1, Math.max(0, 2*t)));
+  const g = Math.floor(255 * Math.min(1, Math.max(0, 2*(t-0.25))));
+  const b = Math.floor(255 * Math.min(1, Math.max(0, 2*(t-0.6))));
+  return [r,g,b, Math.min(1, Math.pow(t,0.9))];
+}
+
+let nodes = []; // animated agents
+
+function render(){
+  const rect = canvas.getBoundingClientRect(); const w = rect.width, h = rect.height;
+  const events = loadEvents();
+  const maxv = accumulate(events);
+  // draw colorized heatmap by sampling grid and scaling
+  const off = document.createElement('canvas'); off.width = GRID_W; off.height = GRID_H;
+  const octx = off.getContext('2d');
+  const img = octx.createImageData(GRID_W, GRID_H);
+  for(let y=0;y<GRID_H;y++){ for(let x=0;x<GRID_W;x++){ const v=grid[y*GRID_W+x]/(maxv||1); const idx = (y*GRID_W+x)*4; if(v<=0){ img.data[idx]=img.data[idx+1]=img.data[idx+2]=0; img.data[idx+3]=0; } else { const c=colorMap(v); img.data[idx]=c[0]; img.data[idx+1]=c[1]; img.data[idx+2]=c[2]; img.data[idx+3]=Math.floor(255*c[3]); } } }
+  octx.putImageData(img,0,0);
+  // upscale with smoothing
+  ctx.clearRect(0,0,w,h);
+  ctx.imageSmoothingEnabled = true;
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.drawImage(off, 0,0, w, h);
+  ctx.globalCompositeOperation = 'source-over';
+
+  // draw subtle hillshade by sampling brightness differences (cheap approx)
+  const sdata = octx.getImageData(0,0,GRID_W,GRID_H).data;
+  // draw nodes/trails
+  nodes.forEach(n=>{
+    // move along path
+    if(n.path && n.path.length>1){
+      n.t += n.speed;
+      if(n.t >= 1){ n.path.shift(); n.t = 0; }
+      const a = n.path[0], b = n.path[1] || a;
+      n.x = a[0] + (b[0]-a[0]) * n.t;
+      n.y = a[1] + (b[1]-a[1]) * n.t;
+    } else { n.x += (Math.random()-0.5)*0.6; n.y += (Math.random()-0.5)*0.6; }
+    n.x = Math.max(0, Math.min(100, n.x)); n.y = Math.max(0, Math.min(100, n.y));
+    n.trail.unshift([n.x,n.y]); if(n.trail.length>18) n.trail.pop();
+  });
+
+  // draw trails
+  nodes.forEach(n=>{
+    for(let i=0;i<n.trail.length-1;i++){
+      const p1=n.trail[i], p2=n.trail[i+1];
+      ctx.beginPath(); ctx.moveTo((p1[0]/100)*w, (p1[1]/100)*h); ctx.lineTo((p2[0]/100)*w, (p2[1]/100)*h);
+      ctx.strokeStyle = n.color; ctx.lineWidth = Math.max(1.2, 3*(1 - i/n.trail.length)); ctx.globalAlpha = 0.9*(1 - i/n.trail.length);
+      ctx.stroke();
+    }
+  });
+  // draw nodes
+  nodes.forEach(n=>{
+    const px=(n.x/100)*w, py=(n.y/100)*h;
+    ctx.beginPath(); ctx.fillStyle = '#06121b'; ctx.arc(px,py,8,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.fillStyle = n.color; ctx.arc(px,py,5,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.font='11px Inter, Arial'; ctx.fillText(n.mac, px+10, py-6);
+  });
+
+  // overlay patient markers
+  EHR.forEach(p=>{
+    const px=(p.coord[0]/100)*w, py=(p.coord[1]/100)*h;
+    ctx.beginPath(); ctx.fillStyle='rgba(140,140,255,0.18)'; ctx.arc(px,py,10,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.font='11px Inter, Arial'; ctx.fillText(p.name, px+12, py+4);
+  });
+
+  requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
+
+/* --------- Simulation: simulated hospital network feed (paths) --------- */
+function createPathBetween(a,b,steps=40){
+  const path=[];
+  for(let i=0;i<steps;i++){ const t=i/(steps-1); path.push([a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t]); }
+  return path;
+}
+
+function spawnAgent(mac, start, targets){
+  const color = (Math.random()>0.7)?'#ff6b6b':'#39d0ff';
+  const agent = {mac:mac, x:start[0], y:start[1], trail:[], path:[], t:0, speed:0.02 + Math.random()*0.04, color:color};
+  // build a path that visits targets sequentially
+  agent.path = [];
+  let cur = start;
+  targets.forEach(tg=>{ agent.path = agent.path.concat(createPathBetween(cur, tg, 60)); cur = tg; });
+  // loop back a bit
+  agent.path = agent.path.concat(createPathBetween(cur, start, 60));
+  nodes.push(agent); if(nodes.length>400) nodes.shift();
+  return agent;
+}
+
+// Seed simulation with agents that travel between wards/patient coords and hall points
+const wardCenters = [ [28,30], [72,40], [45,75], [58,20], [20,70] ];
+function seedAgents(){
+  nodes = []; // clear existing
+  for(let i=0;i<22;i++){
+    const mac = 'CV:'+Math.floor(10000 + Math.random()*89999);
+    const start = wardCenters[Math.floor(Math.random()*wardCenters.length)];
+    // choose 2 targets
+    const t1 = wardCenters[Math.floor(Math.random()*wardCenters.length)];
+    const t2 = wardCenters[Math.floor(Math.random()*wardCenters.length)];
+    spawnAgent(mac, start, [t1, t2]);
+  }
+}
+seedAgents();
+
+/* --------- Event emission from agents into events store --------- */
+let emitTimer = null;
+function startEmit(rate=220){
+  if(emitTimer) return;
+  document.getElementById('simStatus').innerText='Simulation: running';
+  document.getElementById('btnSim').innerText='Stop Simulation';
+  emitTimer = setInterval(()=>{
+    // pick a subset of agents and emit events from their current position
+    for(let i=0;i<6;i++){
+      const a = nodes[Math.floor(Math.random()*nodes.length)];
+      if(!a) continue;
+      const evt = {mac:a.mac, x: Math.max(0, Math.min(100, a.x + (Math.random()-0.5)*2)), y: Math.max(0, Math.min(100, a.y + (Math.random()-0.5)*2)), ts: new Date().toISOString()};
+      // attach prediction and EHR proximity
+      evt.prediction = predict(evt);
+      EHR.forEach(p=>{ const dx = evt.x - p.coord[0], dy = evt.y - p.coord[1]; if(Math.sqrt(dx*dx+dy*dy)<10){ evt.nearPatient=p.patientId; evt.nearPatientName=p.name; } });
+      saveEvent(evt); pushFeed(evt, evt.prediction); // spawn visual node for this event too
+      spawnNodeForEvent(evt);
+      if(evt.prediction.risk >= PRETRAINED.threshold) addAlertSidebar(evt);
+      updateCharts(evt.prediction);
+    }
+  }, rate);
+}
+function stopEmit(){ if(!emitTimer) return; clearInterval(emitTimer); emitTimer = null; document.getElementById('simStatus').innerText='Simulation: stopped'; document.getElementById('btnSim').innerText='Start Simulation'; }
+
+document.getElementById('btnSim').onclick = ()=>{ if(emitTimer) stopEmit(); else startEmit(250); };
+
+/* spawn visual node for event */
+function spawnNodeForEvent(evt){ nodes.push({mac:evt.mac,x:evt.x,y:evt.y,trail:[],t:0,speed:0.02,color: evt.prediction.risk>=PRETRAINED.threshold? '#ff6b6b' : '#39d0ff'}); if(nodes.length>600) nodes.shift(); }
+
+/* --------- Live feed and alerts --------- */
+function pushFeed(evt, pred){
+  const feed = document.getElementById('liveFeed');
+  const item = document.createElement('div'); item.className='feed-item';
+  item.innerHTML = '<div><strong>'+evt.mac+'</strong><div class="small">'+evt.x+','+evt.y+' • '+evt.ts+'</div></div><div style="text-align:right"><div class="tag">'+pred.label+'</div><div class="small">'+(pred.risk*100).toFixed(1)+'%</div></div>';
+  feed.prepend(item); if(feed.children.length>160) feed.removeChild(feed.lastChild);
+}
+function addAlertSidebar(evt){
+  const sidebar = document.querySelector('.sidebar');
+  const a = document.createElement('div'); a.style.padding='8px'; a.style.marginTop='8px'; a.style.borderRadius='8px'; a.style.background = 'linear-gradient(90deg, rgba(255,90,60,0.08), rgba(138,91,255,0.03))';
+  a.innerHTML = '<div style="font-weight:700">'+evt.mac+'</div><div class="small">'+evt.prediction.label+' • '+nowStr()+'</div>';
+  sidebar.insertBefore(a, sidebar.children[3]);
+}
+
+/* --------- Charts update --------- */
+function updateCharts(pred){ const l = ctChart.data.labels, d = ctChart.data.datasets[0].data; l.unshift(nowStr()); d.unshift(Math.round(pred.risk*100)); if(l.length>10){ l.pop(); d.pop(); } ctChart.update(); const tl = trendChart.data.labels, td = trendChart.data.datasets[0].data; tl.unshift(nowStr()); td.unshift(pred.risk>=PRETRAINED.threshold?1:0); if(tl.length>20){ tl.pop(); td.pop(); } trendChart.update(); }
+
+/* --------- Patient details ingest lab --------- */
+document.getElementById('btnIngestLab').onclick = function(){ const p = EHR[Math.floor(Math.random()*EHR.length)]; p.lastLab = 'MDR Detected (MRSA)'; p.labTime = new Date().toLocaleString(); localStorage.setItem(STORE_EHR, JSON.stringify(EHR)); buildWardList(); showPatientsForWard(p.ward, EHR.filter(x=>x.ward===p.ward)); const evs = loadEvents(); const close = evs.filter(e=>{ const dx=e.x - p.coord[0], dy=e.y - p.coord[1]; return Math.sqrt(dx*dx+dy*dy) < 18; }).slice(0,80); close.forEach(c=> addAlertSidebar(c)); alert('Lab result ingested for ' + p.name + '. ' + close.length + ' exposures flagged.'); };
+
+/* --------- Tab switching (true SPA) --------- */
+function showSection(id){
+  ['heatSection','feedSection','patientSection','analyticsSection'].forEach(s => { const el=document.getElementById(s); if(el) el.style.display = (s===id)?'block':'none'; });
+  document.querySelectorAll('.nav a').forEach(a=>a.classList.remove('active'));
+  const map = {'heatSection':'navHeat','feedSection':'navFeed','patientSection':'navEHR','analyticsSection':'navAnalytics'};
+  const link = document.getElementById(map[id]); if(link) link.classList.add('active');
+}
+document.getElementById('navHeat').addEventListener('click', e => { e.preventDefault(); showSection('heatSection'); });
+document.getElementById('navFeed').addEventListener('click', e => { e.preventDefault(); showSection('feedSection'); });
+document.getElementById('navEHR').addEventListener('click', e => { e.preventDefault(); showSection('patientSection'); });
+document.getElementById('navAnalytics').addEventListener('click', e => { e.preventDefault(); showSection('analyticsSection'); });
+
+/* --------- Init helpers --------- */
+function spawnNode(mac,x,y){ nodes.push({mac:mac,x:x,y:y,trail:[],t:0,speed:0.02,color:'#39d0ff'}); }
+function seedFromEHR(){ EHR.forEach(p=>{ spawnNode('PAT:'+p.patientId, p.coord[0]+(Math.random()-0.5)*3, p.coord[1]+(Math.random()-0.5)*3); }); }
+
+/* --------- Startup flow --------- */
+(async function init(){
+  await loadModel();
+  buildWardList();
+  seedAgents();
+  seedFromEHR();
+  // replay old events if any for heatmap continuity
+  const evs = loadEvents(); evs.slice(0,400).forEach(e=> spawnNodeForEvent(e));
+  // start emit to show network feed automatically
+  startEmit(240);
+  // clock
+  setInterval(()=>{ document.getElementById('mapClock').innerText = new Date().toLocaleTimeString(); }, 1000);
+  // default show heat
+  showSection('heatSection');
+})();
+
+</script>
+</body>
+</html>
